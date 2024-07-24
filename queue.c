@@ -6,33 +6,15 @@
 // Define a constant for failure return value
 const int FAIL = -1;
 
-// Node structure for the queue
-typedef struct Node {
-    struct timeval arrival_time; // Time when the node was added
-    int value;
-    struct Node* previous;
-    struct Node* next;
-} Node;
-
-typedef struct queue {
-    int size; // Current size of the queue
-    int max_size; // Maximum allowed size of the queue
-    Node* tail;
-    Node* head;
-} queue;
-
-queue* initializeQueue(int max_size) {
-    queue* newQueue = (queue*)malloc(sizeof(queue));
-    newQueue->size = 0;
-    newQueue->tail = NULL;
-    newQueue->head = NULL;
-    newQueue->max_size = max_size;
-    return newQueue;
+void initializeQueue(Queue* queue) {
+    queue->size = 0;
+    queue->tail = NULL;
+    queue->head = NULL;
 }
 
-int push(queue* queue, int value, struct timeval arrival_time) {
+int push(Queue* queue, int fd, struct timeval arrival_time) {
     Node* newNode = (Node*)malloc(sizeof(Node));
-    newNode->value = value;
+    newNode->fd = fd;
     newNode->next = queue->tail; // Set the next pointer to the current tail
     newNode->previous = NULL; // Set the previous pointer to NULL
     newNode->arrival_time = arrival_time;
@@ -48,17 +30,16 @@ int push(queue* queue, int value, struct timeval arrival_time) {
     }
 
     queue->size++;
-    return newNode->value; // Return the added value
+    return newNode->fd; // Return the added fd
 }
 
-int pop(queue* queue, struct timeval *arrival_time_ptr) {
+int pop(Queue* queue) {
     if (queue->size == 0) {
         return FAIL; // Return FAIL if the queue is empty
     }
 
     Node* toDelete = queue->head; // Get the node to delete (head)
-    int value = queue->head->value; // Get the value of the head node
-    *arrival_time_ptr = queue->head->arrival_time; // Copy the arrival time
+    int fd = queue->head->fd; // Get the fd of the head node
 
     queue->head = queue->head->previous; // Update the head to the previous node
 
@@ -70,16 +51,16 @@ int pop(queue* queue, struct timeval *arrival_time_ptr) {
 
     free(toDelete);
     queue->size--;
-    return value;
+    return fd;
 }
 
-int pop_by_val(queue* queue, int val) {
+int pop_by_fd(Queue* queue, int val) {
     Node* curr = queue->tail; // Start from the tail
     Node* toDelete = NULL;
 
-    // Traverse the queue to find the node with the given value
+    // Traverse the queue to find the node with the given fd
     while (curr) {
-        if (curr->value == val) {
+        if (curr->fd == val) {
             toDelete = curr;
             break;
         }
@@ -87,19 +68,19 @@ int pop_by_val(queue* queue, int val) {
     }
 
     if (curr == NULL) {
-        return FAIL; // Return FAIL if the value is not found
+        return FAIL; // Return FAIL if the fd is not found
     }
 
-    int value = toDelete->value;
+    int fd = toDelete->fd;
 
     // Update pointers based on the node's position
     if (queue->size == 1) {
         queue->tail = NULL;
         queue->head = NULL;
-    } else if (toDelete->value == queue->head->value) {
+    } else if (toDelete->fd == queue->head->fd) {
         queue->head = queue->head->previous;
         queue->head->next = NULL;
-    } else if (toDelete->value == queue->tail->value) {
+    } else if (toDelete->fd == queue->tail->fd) {
         queue->tail = queue->tail->next;
         queue->tail->previous = NULL;
     } else {
@@ -109,10 +90,10 @@ int pop_by_val(queue* queue, int val) {
 
     free(toDelete);
     queue->size--;
-    return value;
+    return fd;
 }
 
-int pop_by_index(queue* queue, int index) {
+int pop_by_index(Queue* queue, int index) {
     // Assuming the index is valid
     Node* toDelete = queue->tail; // Start from the tail
 
@@ -121,16 +102,16 @@ int pop_by_index(queue* queue, int index) {
         toDelete = toDelete->next;
     }
 
-    int value = toDelete->value;
+    int fd = toDelete->fd;
 
     // Update pointers based on the node's position
     if (queue->size == 1) {
         queue->tail = NULL;
         queue->head = NULL;
-    } else if (toDelete->value == queue->head->value) {
+    } else if (toDelete->fd == queue->head->fd) {
         queue->head = queue->head->previous;
         queue->head->next = NULL;
-    } else if (toDelete->value == queue->tail->value) {
+    } else if (toDelete->fd == queue->tail->fd) {
         queue->tail = queue->tail->next;
         queue->tail->previous = NULL;
     } else {
@@ -140,19 +121,22 @@ int pop_by_index(queue* queue, int index) {
 
     free(toDelete);
     queue->size--;
-    return value;
+    return fd;
 }
 
-int getSize(queue* queue) {
+int getSize(Queue* queue) {
     return queue->size;
 }
-
-void deleteQueue(queue* queue) {
-    struct timeval arrival_time;
-    int size = queue->size;
-
-    // Pop all elements from the queue
-    for (int i = 0; i < size; ++i) {
-        pop(queue, &arrival_time);
-    }
+struct timeval getArrivalTime(Queue* queue) {
+    return queue->head->arrival_time;
 }
+
+//void deleteQueue(Queue* queue) {
+//    struct timeval arrival_time;
+//    int size = queue->size;
+//
+//    // Pop all elements from the queue
+//    for (int i = 0; i < size; ++i) {
+//        pop(&queue, &fd, &arrival_time);
+//    }
+//}

@@ -1,15 +1,7 @@
 #include "threads_stats.h"
 
-// Definition of the Threads_stats structure
-typedef struct Threads_stats {
-    int id; // Thread ID
-    int stat_req; // Number of static requests handled by the thread
-    int dynm_req; // Number of dynamic requests handled by the thread
-    int total_req; // Total number of requests handled by the thread
-} *threads_stats;
-
-void initStats(threads_stats stats, int id) {
-    stats->id = id;
+void initStats(threads_stats stats, int* id) {
+    stats->id = *id;
     stats->stat_req = 0;
     stats->dynm_req = 0;
     stats->total_req = 0;

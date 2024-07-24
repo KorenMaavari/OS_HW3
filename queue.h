@@ -5,13 +5,26 @@
 #include <stdlib.h>
 #include "segel.h"
 
-typedef struct Node Node;
-typedef struct queue queue;
-queue* initializeQueue(int max_size);
-int pop(queue* queue, struct timeval *arrival_time_ptr);
-int pop_by_val(queue* queue, int val);
-int pop_by_index(queue* queue, int index);
-int push(queue* queue, int value, struct timeval arrival_time);
-int getSize(queue* queue);
+// Node structure for the queue
+typedef struct Node {
+    struct timeval arrival_time; // Time when the node was added
+    int fd;
+    struct Node* previous;
+    struct Node* next;
+} Node;
+
+typedef struct Queue {
+    int size; // Current size of the queue
+    Node* tail;
+    Node* head;
+} Queue;
+
+void initializeQueue(Queue* queue);
+int pop(Queue* queue);
+int pop_by_fd(Queue* queue, int val);
+int pop_by_index(Queue* queue, int index);
+int push(Queue* queue, int fd, struct timeval arrival_time);
+int getSize(Queue* queue);
+struct timeval getArrivalTime(Queue* queue);
 
 #endif /* QUEUE_H_ */
