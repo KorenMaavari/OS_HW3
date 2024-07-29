@@ -5,6 +5,7 @@
 
 // Define a constant for failure return value
 const int FAIL = -1;
+const int SUCCESS = 1;
 
 void initializeQueue(Queue* queue) {
     queue->size = 0;
@@ -127,8 +128,24 @@ int pop_by_index(Queue* queue, int index) {
 int getSize(Queue* queue) {
     return queue->size;
 }
-struct timeval getArrivalTime(Queue* queue) {
+struct timeval getHeadArrivalTime(Queue* queue) {
     return queue->head->arrival_time;
+}
+
+struct timeval getTailArrivalTime(Queue* queue) {
+    return queue->tail->arrival_time;
+}
+
+int getArrivalTimeByFd(Queue* queue, int fd, struct timeval* requested_arrival_time) {
+    Node* curr = queue->tail; // Start from the tail
+    while (curr) {
+        if (curr->fd == fd) {
+            *requested_arrival_time = curr->arrival_time;
+            return SUCCESS;
+        }
+        curr = curr->next;
+    }
+    return FAIL;
 }
 
 //void deleteQueue(Queue* queue) {

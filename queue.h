@@ -25,6 +25,8 @@ int pop_by_fd(Queue* queue, int val);
 int pop_by_index(Queue* queue, int index);
 int push(Queue* queue, int fd, struct timeval arrival_time);
 int getSize(Queue* queue);
-struct timeval getArrivalTime(Queue* queue);
+struct timeval getHeadArrivalTime(Queue* queue);
+struct timeval getTailArrivalTime(Queue* queue);
+int getArrivalTimeByFd(Queue* queue, int fd, struct timeval* requested_arrival_time);
 
 #endif /* QUEUE_H_ */

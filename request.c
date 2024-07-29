@@ -4,6 +4,9 @@
 
 #include "segel.h"
 #include "request.h"
+#include "queue.h"
+#include "globalVariables.h"
+#include <sys/wait.h>
 
 // requestError(      fd,    filename,        "404",    "Not found", "OS-HW3 Server could not find this file");
 void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg, struct timeval arrival_time, struct timeval dispatch_time, threads_stats stats)
@@ -183,7 +186,7 @@ void requestServeStatic(int fd, char *filename, int filesize, struct timeval arr
 }
 
 // handle a request
-void requestHandle(int fd, struct timeval arrival_time, struct timeval dispatch_time, threads_stats stats)
+void requestHandle(int fd, struct timeval arrival_time, struct timeval dispatch_time, threads_stats stats, int* skipFd, struct timeval* skipDispatchTime)
 {
 
    int is_static;
@@ -215,6 +218,19 @@ void requestHandle(int fd, struct timeval arrival_time, struct timeval dispatch_
       requestError(fd, filename, "404", "Not found", "OS-HW3 Server could not find this file", arrival_time, dispatch_time, stats);
       return;
    }
+
+    if (strstr(filename, ".skip")) {
+        pthread_mutex_lock(&queueMutex);
+        if(getSize(&waitingQueue) > 0) {
+            struct timeval skip_arrival_time = getTailArrivalTime(&waitingQueue);
+            struct timeval skip_start_time;
+            *skipFd = pop_by_index(&waitingQueue, (getSize(&waitingQueue) - 1));
+            gettimeofday(&skip_start_time, NULL);    //Save start time
+            timersub(&skip_start_time, &skip_arrival_time, skipDispatchTime);
+            push(&workingQueue, *skipFd, skip_arrival_time);
+        }
+        pthread_mutex_unlock(&queueMutex);
+    }
 
    if (is_static) {
       // Serve static content

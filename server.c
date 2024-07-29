@@ -1,6 +1,7 @@
 #include "segel.h"
 #include "request.h"
 #include "queue.h"
+#include "globalVariables.h"
 #include <string.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -23,12 +24,8 @@
 //
 
 //global variables
-pthread_mutex_t queueMutex;
-pthread_cond_t requestWaitingCond;
-pthread_cond_t requestOverloadCond;
 int overloadPolicy;
-Queue waitingQueue;
-Queue workingQueue;
+
 
 // HW3: Parse the new arguments too
 void getargs(int *port, int *numOfThreads, int *maxNumOfRequests, int argc, char *argv[])
@@ -68,19 +65,30 @@ void* workingThreadRoutine(void* args) {
             pthread_cond_wait(&requestWaitingCond, &queueMutex);
         }
         struct timeval start_time;
-        struct timeval arrival_time = getArrivalTime(&waitingQueue);
+        struct timeval arrival_time = getHeadArrivalTime(&waitingQueue);
         int fd = pop(&waitingQueue); //Remove request from wait queue
         gettimeofday(&start_time, NULL);    //Save start time
         push(&workingQueue, fd, arrival_time);  //Add request for working queue
         pthread_mutex_unlock(&queueMutex);
 
+        int skip_fd = -1;
+        struct timeval skip_dispatch_time;
         struct timeval dispatch_time;
         timersub(&start_time, &arrival_time, &dispatch_time);
-        requestHandle(fd, arrival_time, dispatch_time, &stats);
+        requestHandle(fd, arrival_time, dispatch_time, &stats, &skip_fd, &skip_dispatch_time);
         Close(fd);
+        if(skip_fd != -1) {
+            struct timeval skip_arrival_time;
+            getArrivalTimeByFd(&workingQueue, skip_fd, &skip_arrival_time);
+            requestHandle(skip_fd, skip_arrival_time, skip_dispatch_time, &stats, NULL, NULL);
+            Close(skip_fd);
+        }
 
         pthread_mutex_lock(&queueMutex);
-        pop(&workingQueue); //Remove request from work queue
+        pop_by_fd(&workingQueue, fd); //Remove request from work queue
+        if(skip_fd != -1) {
+            pop_by_fd(&workingQueue, skip_fd);
+        }
         pthread_cond_signal(&requestOverloadCond);
         if(getSize(&waitingQueue) + getSize(&workingQueue) == 0) {
             pthread_cond_signal(&requestWaitingCond);
@@ -128,8 +136,13 @@ void handleDropRandom(struct timeval *arrival_time, int newFd) {
         int fdToClose = pop_by_index(&waitingQueue, index);
         Close(fdToClose);
     }
-    gettimeofday(arrival_time, NULL);
-    push(&waitingQueue, newFd, *arrival_time);
+    if(range > 0) {
+        gettimeofday(arrival_time, NULL);
+        push(&waitingQueue, newFd, *arrival_time);
+    }
+    else {  //If waiting queue is empty, no requests to drop, drop the new request
+        Close(newFd);
+    }
     pthread_mutex_unlock(&queueMutex);
 }
 
@@ -140,11 +153,10 @@ int main(int argc, char *argv[])
 
     int numOfThreads, maxNumOfRequests;
 
-    //Initialize mutex and condition variables
+    //Initialize mutex, condition variables and queues
     pthread_cond_init(&requestWaitingCond, NULL);
     pthread_cond_init(&requestOverloadCond, NULL);
     pthread_mutex_init(&queueMutex, NULL);
-
     initializeQueue(&waitingQueue);
     initializeQueue(&workingQueue);
 
@@ -197,7 +209,6 @@ int main(int argc, char *argv[])
             default:
                 break;
         }
-        //implement policies
         //pthread_mutex_unlock(&queueMutex);
     }
 
