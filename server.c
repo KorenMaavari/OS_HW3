@@ -90,9 +90,10 @@ void* workingThreadRoutine(void* args) {
             pop_by_fd(&workingQueue, skip_fd);
         }
         pthread_cond_signal(&requestOverloadCond);
-        if(getSize(&waitingQueue) + getSize(&workingQueue) == 0) {
-            pthread_cond_signal(&requestWaitingCond);
-        }
+//        if(getSize(&waitingQueue) + getSize(&workingQueue) == 0) {
+//            pthread_cond_signal(&requestWaitingCond);
+//        }
+        pthread_cond_signal(&requestWaitingCond);
         pthread_mutex_unlock(&queueMutex);
     }
 }
@@ -100,8 +101,8 @@ void* workingThreadRoutine(void* args) {
 void handleBlock(struct timeval *arrival_time, int newFd) {
     pthread_mutex_lock(&queueMutex);
     pthread_cond_wait(&requestOverloadCond, &queueMutex);
-    gettimeofday(arrival_time, NULL);
     push(&waitingQueue, newFd, *arrival_time);
+    pthread_cond_signal(&requestWaitingCond);
     pthread_mutex_unlock(&queueMutex);
 }
 
@@ -118,12 +119,15 @@ void handleDropHead(struct timeval *arrival_time, int newFd) {
     int fdToClose = pop(&waitingQueue);
     Close(fdToClose);
     push(&waitingQueue, newFd, *arrival_time);
+    pthread_cond_signal(&requestWaitingCond);
     pthread_mutex_unlock(&queueMutex);
 }
 
 void handleBlockFlush(int fd) {
     pthread_mutex_lock(&queueMutex);
-    pthread_cond_wait(&requestWaitingCond, &queueMutex);
+    while((getSize(&waitingQueue) + getSize(&workingQueue)) > 0) {
+        pthread_cond_wait(&requestWaitingCond, &queueMutex);
+    }
     Close(fd);
     pthread_mutex_unlock(&queueMutex);
 }
@@ -137,8 +141,8 @@ void handleDropRandom(struct timeval *arrival_time, int newFd) {
         Close(fdToClose);
     }
     if(range > 0) {
-        gettimeofday(arrival_time, NULL);
         push(&waitingQueue, newFd, *arrival_time);
+        pthread_cond_signal(&requestWaitingCond);
     }
     else {  //If waiting queue is empty, no requests to drop, drop the new request
         Close(newFd);
@@ -176,54 +180,45 @@ int main(int argc, char *argv[])
     struct timeval arrival_time;
 
     while (1) {
-	clientlen = sizeof(clientaddr);
-	connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *) &clientlen);
-
-    pthread_mutex_lock(&queueMutex);
-    if(getSize(&waitingQueue) + getSize(&workingQueue) < maxNumOfRequests) {
-        //allowing to accept new request
+        clientlen = sizeof(clientaddr);
+        connfd = Accept(listenfd, (SA *) &clientaddr, (socklen_t * ) & clientlen);
         gettimeofday(&arrival_time, NULL);
-        push(&waitingQueue, connfd, arrival_time);
-        if(getSize(&workingQueue) < numOfThreads) {
-            pthread_cond_signal(&requestWaitingCond);
-        }
-        pthread_mutex_unlock(&queueMutex);
-    }
-    else{
-        switch(overloadPolicy) {
-            case BLOCK:
-                handleBlock(&arrival_time, connfd);
-                break;
-            case DROP_TAIL:
-                handleDropTail(&arrival_time);
-                break;
-            case DROP_HEAD:
-                handleDropHead(&arrival_time, connfd);
-                break;
-            case BLOCK_FLUSH:
-                handleBlockFlush(connfd);
-                break;
-            case DROP_RANDOM:
-                handleDropRandom(&arrival_time, connfd);
-                break;
-            default:
-                break;
-        }
-        //pthread_mutex_unlock(&queueMutex);
-    }
 
-
+        if (getSize(&waitingQueue) + getSize(&workingQueue) < maxNumOfRequests) {
+            //allowing to accept new request
+            pthread_mutex_lock(&queueMutex);
+            push(&waitingQueue, connfd, arrival_time);
+            if (getSize(&workingQueue) < numOfThreads) {
+                pthread_cond_signal(&requestWaitingCond);
+            }
+            pthread_mutex_unlock(&queueMutex);
+        } else {
+            switch (overloadPolicy) {
+                case BLOCK:
+                    handleBlock(&arrival_time, connfd);
+                    break;
+                case DROP_TAIL:
+                    handleDropTail(&arrival_time);
+                    break;
+                case DROP_HEAD:
+                    handleDropHead(&arrival_time, connfd);
+                    break;
+                case BLOCK_FLUSH:
+                    handleBlockFlush(connfd);
+                    break;
+                case DROP_RANDOM:
+                    handleDropRandom(&arrival_time, connfd);
+                    break;
+                default:
+                    break;
+            }
+            //pthread_mutex_unlock(&queueMutex);
+        }
+    }
 	// 
 	// HW3: In general, don't handle the request in the main thread.
 	// Save the relevant info in a buffer and have one of the worker threads 
-	// do the work. 
-	// 
-
-    //requestHandle(connfd);
-
-	Close(connfd);
-    }
-
+	// do the work.
 }
 
 
