@@ -106,20 +106,23 @@ void handleBlock(struct timeval *arrival_time, int newFd) {
     pthread_mutex_unlock(&queueMutex);
 }
 
-void handleDropTail(struct timeval *arrival_time) {
+void handleDropTail(struct timeval *arrival_time, int newFd) {
     pthread_mutex_lock(&queueMutex);
-    int indexToPop = getSize(&waitingQueue) - 1;
-    int fdToClose = pop_by_index(&waitingQueue, indexToPop);
-    Close(fdToClose);
+    Close(newFd);
     pthread_mutex_unlock(&queueMutex);
 }
 
 void handleDropHead(struct timeval *arrival_time, int newFd) {
     pthread_mutex_lock(&queueMutex);
-    int fdToClose = pop(&waitingQueue);
-    Close(fdToClose);
-    push(&waitingQueue, newFd, *arrival_time);
-    pthread_cond_signal(&requestWaitingCond);
+    if(getSize(&waitingQueue) == 0) {
+        Close(newFd);
+    }
+    else {
+        int fdToClose = pop(&waitingQueue);
+        Close(fdToClose);
+        push(&waitingQueue, newFd, *arrival_time);
+        pthread_cond_signal(&requestWaitingCond);
+    }
     pthread_mutex_unlock(&queueMutex);
 }
 
@@ -198,7 +201,7 @@ int main(int argc, char *argv[])
                     handleBlock(&arrival_time, connfd);
                     break;
                 case DROP_TAIL:
-                    handleDropTail(&arrival_time);
+                    handleDropTail(&arrival_time, connfd);
                     break;
                 case DROP_HEAD:
                     handleDropHead(&arrival_time, connfd);
@@ -212,7 +215,6 @@ int main(int argc, char *argv[])
                 default:
                     break;
             }
-            //pthread_mutex_unlock(&queueMutex);
         }
     }
 	// 
