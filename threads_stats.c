@@ -1,7 +1,7 @@
 #include "threads_stats.h"
 
-void initStats(threads_stats stats, int* id) {
-    stats->id = *id;
+void initStats(threads_stats stats, int id) {
+    stats->id = id;
     stats->stat_req = 0;
     stats->dynm_req = 0;
     stats->total_req = 0;

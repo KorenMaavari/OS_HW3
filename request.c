@@ -119,7 +119,8 @@ void requestServeDynamic(int fd, char *filename, char *cgiargs, struct timeval a
    char buf[MAXLINE], *emptylist[] = {NULL};
 
    // Increment the dynamic request count for the thread
-   incDynamicReq(stats);
+   //incDynamicReq(stats);
+    (stats->dynm_req)++;
 
    // The server does only a little bit of the header.  
    // The CGI script has to finish writing out the header.
@@ -154,7 +155,8 @@ void requestServeStatic(int fd, char *filename, int filesize, struct timeval arr
    char *srcp, filetype[MAXLINE], buf[MAXBUF];
 
    // Increment the static request count for the thread
-   incStaticReq(stats);
+   //incStaticReq(stats);
+    (stats->stat_req)++;
 
    requestGetFiletype(filename, filetype);
 
@@ -196,7 +198,8 @@ void requestHandle(int fd, struct timeval arrival_time, struct timeval dispatch_
    rio_t rio;
 
    // Increment the total request count for the thread
-   incTotalReq(stats);
+   //incTotalReq(stats);
+    (stats->total_req)++;
 
    Rio_readinitb(&rio, fd);
    Rio_readlineb(&rio, buf, MAXLINE);

@@ -7,10 +7,12 @@ typedef struct Threads_stats {
     int stat_req; // Number of static requests handled by the thread
     int dynm_req; // Number of dynamic requests handled by the thread
     int total_req; // Total number of requests handled by the thread
-} *threads_stats;
+}Threads_stats;
+
+typedef Threads_stats* threads_stats;
 
 // Initialize the statistics for a thread with a given ID
-void initStats(threads_stats stats, int* id);
+void initStats(threads_stats stats, int id);
 
 // Get the ID of the thread
 int getId(threads_stats stats);

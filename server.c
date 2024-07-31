@@ -57,8 +57,7 @@ void getargs(int *port, int *numOfThreads, int *maxNumOfRequests, int argc, char
 }
 
 void* workingThreadRoutine(void* args) {
-    struct Threads_stats stats;
-    initStats((threads_stats)&stats, (int*)args);    //Initialize Stats struct with args == thread index
+    threads_stats current_thread_stats = (threads_stats)args;
     while(1) {
         pthread_mutex_lock(&queueMutex);
         while(getSize(&waitingQueue) == 0) {
@@ -75,12 +74,12 @@ void* workingThreadRoutine(void* args) {
         struct timeval skip_dispatch_time;
         struct timeval dispatch_time;
         timersub(&start_time, &arrival_time, &dispatch_time);
-        requestHandle(fd, arrival_time, dispatch_time, &stats, &skip_fd, &skip_dispatch_time);
+        requestHandle(fd, arrival_time, dispatch_time, current_thread_stats, &skip_fd, &skip_dispatch_time);
         Close(fd);
         if(skip_fd != -1) {
             struct timeval skip_arrival_time;
             getArrivalTimeByFd(&workingQueue, skip_fd, &skip_arrival_time);
-            requestHandle(skip_fd, skip_arrival_time, skip_dispatch_time, &stats, NULL, NULL);
+            requestHandle(skip_fd, skip_arrival_time, skip_dispatch_time, current_thread_stats, NULL, NULL);
             Close(skip_fd);
         }
 
@@ -174,9 +173,11 @@ int main(int argc, char *argv[])
     // HW3: Create some threads...
     //
 
-    pthread_t threads[numOfThreads];
+    pthread_t* threads = (pthread_t*)malloc(numOfThreads*sizeof(pthread_t));
+    threads_stats stats = (threads_stats)malloc(numOfThreads*sizeof(Threads_stats));
     for (unsigned int i=0; i<numOfThreads; i++){
-        pthread_create(&threads[i], NULL, workingThreadRoutine, &i);
+        initStats(&(stats[i]), i);
+        pthread_create(&threads[i], NULL, workingThreadRoutine, (void*)&(stats[i]));
     }
 
     listenfd = Open_listenfd(port);
