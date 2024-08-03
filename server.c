@@ -88,31 +88,38 @@ void* workingThreadRoutine(void* args) {
         if(skip_fd != -1) {
             pop_by_fd(&workingQueue, skip_fd);
         }
-        pthread_cond_signal(&requestOverloadCond);
-//        if(getSize(&waitingQueue) + getSize(&workingQueue) == 0) {
-//            pthread_cond_signal(&requestWaitingCond);
-//        }
-        pthread_cond_signal(&requestWaitingCond);
         pthread_mutex_unlock(&queueMutex);
+
+        if(overloadPolicy == BLOCK) {
+            pthread_cond_signal(&requestOverloadCond);
+        }
+        else if(overloadPolicy == BLOCK_FLUSH) {
+            pthread_mutex_lock(&queueMutex);
+            if((getSize(&waitingQueue) + getSize(&workingQueue)) == 0) {
+                pthread_cond_signal(&requestOverloadCond);
+            }
+            pthread_mutex_unlock(&queueMutex);
+        }
+
+        pthread_cond_signal(&requestWaitingCond);
     }
 }
 
-void handleBlock(struct timeval *arrival_time, int newFd) {
-    pthread_mutex_lock(&queueMutex);
+void handleBlock(struct timeval *arrival_time, int newFd, int numOfThreads) {
     pthread_cond_wait(&requestOverloadCond, &queueMutex);
     push(&waitingQueue, newFd, *arrival_time);
-    pthread_cond_signal(&requestWaitingCond);
+    if(getSize(&workingQueue) < numOfThreads) {
+        pthread_cond_signal(&requestWaitingCond);
+    }
     pthread_mutex_unlock(&queueMutex);
 }
 
 void handleDropTail(struct timeval *arrival_time, int newFd) {
-    pthread_mutex_lock(&queueMutex);
     Close(newFd);
     pthread_mutex_unlock(&queueMutex);
 }
 
 void handleDropHead(struct timeval *arrival_time, int newFd) {
-    pthread_mutex_lock(&queueMutex);
     if(getSize(&waitingQueue) == 0) {
         Close(newFd);
     }
@@ -126,17 +133,14 @@ void handleDropHead(struct timeval *arrival_time, int newFd) {
 }
 
 void handleBlockFlush(int fd) {
-    pthread_mutex_lock(&queueMutex);
-    while((getSize(&waitingQueue) + getSize(&workingQueue)) > 0) {
-        pthread_cond_wait(&requestWaitingCond, &queueMutex);
-    }
+    pthread_cond_wait(&requestOverloadCond, &queueMutex);
     Close(fd);
     pthread_mutex_unlock(&queueMutex);
 }
 
 void handleDropRandom(struct timeval *arrival_time, int newFd) {
-    pthread_mutex_lock(&queueMutex);
-    int range = (getSize(&waitingQueue) +1) / 2;
+    int range = (getSize(&waitingQueue) + 1) / 2;
+
     for (int i = 0; i < range; ++i) {
         int index = rand() % getSize(&waitingQueue);
         int fdToClose = pop_by_index(&waitingQueue, index);
@@ -169,10 +173,6 @@ int main(int argc, char *argv[])
     //Parse arguments from command line
     getargs(&port, &numOfThreads, &maxNumOfRequests, argc, argv);
 
-    // 
-    // HW3: Create some threads...
-    //
-
     pthread_t* threads = (pthread_t*)malloc(numOfThreads*sizeof(pthread_t));
     threads_stats stats = (threads_stats)malloc(numOfThreads*sizeof(Threads_stats));
     for (unsigned int i=0; i<numOfThreads; i++){
@@ -188,18 +188,20 @@ int main(int argc, char *argv[])
         connfd = Accept(listenfd, (SA *) &clientaddr, (socklen_t * ) & clientlen);
         gettimeofday(&arrival_time, NULL);
 
+        pthread_mutex_lock(&queueMutex);
         if (getSize(&waitingQueue) + getSize(&workingQueue) < maxNumOfRequests) {
             //allowing to accept new request
-            pthread_mutex_lock(&queueMutex);
             push(&waitingQueue, connfd, arrival_time);
             if (getSize(&workingQueue) < numOfThreads) {
                 pthread_cond_signal(&requestWaitingCond);
             }
             pthread_mutex_unlock(&queueMutex);
-        } else {
+        }
+
+        else {  //overload
             switch (overloadPolicy) {
                 case BLOCK:
-                    handleBlock(&arrival_time, connfd);
+                    handleBlock(&arrival_time, connfd, numOfThreads);
                     break;
                 case DROP_TAIL:
                     handleDropTail(&arrival_time, connfd);

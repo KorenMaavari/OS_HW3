@@ -224,6 +224,7 @@ void requestHandle(int fd, struct timeval arrival_time, struct timeval dispatch_
 
     if (strstr(filename, ".skip")) {
         pthread_mutex_lock(&queueMutex);
+        filename[strlen(filename)-5] = '\0';    //remove ".skip" suffix
         if(getSize(&waitingQueue) > 0) {
             struct timeval skip_arrival_time = getTailArrivalTime(&waitingQueue);
             struct timeval skip_start_time;
